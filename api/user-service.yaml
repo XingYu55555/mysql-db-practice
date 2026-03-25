@@ -1,0 +1,261 @@
+openapi: 3.0.3
+info:
+  title: User Service API
+  description: 用户管理服务 - 用户注册、登录、认证
+  version: 1.0.0
+  contact:
+    name: SQL Judge Engine Team
+
+servers:
+  - url: http://localhost:8081
+    description: 本地开发服务器
+
+tags:
+  - name: Auth
+    description: 认证相关接口
+  - name: User
+    description: 用户信息接口
+
+paths:
+  /api/user/register:
+    post:
+      tags:
+        - Auth
+      summary: 用户注册
+      description: 教师或学生自行注册，系统不设管理员
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: 参数校验失败（用户名格式错误、密码太短等）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 用户已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/user/login:
+    post:
+      tags:
+        - Auth
+      summary: 用户登录
+      description: 用户登录后获取JWT Token
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: 用户名或密码错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 账号被禁用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/user/me:
+    get:
+      tags:
+        - User
+      summary: 获取当前用户信息
+      description: 根据JWT Token获取当前登录用户信息
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfo'
+        '401':
+          description: 未授权
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/user/{userId}:
+    get:
+      tags:
+        - User
+      summary: 根据ID获取用户信息
+      description: 根据用户ID获取用户基本信息（教师查看学生信息）
+      operationId: getUserById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfo'
+        '404':
+          description: 用户不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Token
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - password
+        - role
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          description: 用户名
+        password:
+          type: string
+          minLength: 6
+          maxLength: 100
+          description: 密码 (BCrypt加密存储)
+        role:
+          type: string
+          enum:
+            - TEACHER
+            - STUDENT
+          description: 用户角色
+        email:
+          type: string
+          format: email
+          description: 邮箱 (可选)
+
+    RegisterResponse:
+      type: object
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: 用户ID
+        username:
+          type: string
+          description: 用户名
+        role:
+          type: string
+          enum:
+            - TEACHER
+            - STUDENT
+
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          description: 用户名
+        password:
+          type: string
+          description: 密码
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT Token
+        tokenType:
+          type: string
+          example: Bearer
+        expiresIn:
+          type: integer
+          description: 过期时间(秒)
+        userId:
+          type: integer
+          format: int64
+        username:
+          type: string
+        role:
+          type: string
+          enum:
+            - TEACHER
+            - STUDENT
+
+    UserInfo:
+      type: object
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: 用户ID
+        username:
+          type: string
+          description: 用户名
+        role:
+          type: string
+          enum:
+            - TEACHER
+            - STUDENT
+        email:
+          type: string
+          description: 邮箱
+        createdAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 错误码
+        message:
+          type: string
+          description: 错误信息
+        timestamp:
+          type: string
+          format: date-time
