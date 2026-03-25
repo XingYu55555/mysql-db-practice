@@ -1,0 +1,39 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: container-manager
+  datasource:
+    url: jdbc:mysql://${DB_HOST:mysql}:3306/${DB_NAME:business_db}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root_password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  task:
+    execution:
+      pool:
+        core-size: 2
+        max-size: 5
+      thread-name-prefix: container-pool-
+
+app:
+  docker:
+    host: ${DOCKER_HOST:unix:///var/run/docker.sock}
+    judge-image: ${JUDGE_IMAGE:sql-judge/mysql-judge:1.0}
+    network: ${JUDGE_NETWORK:judge_net}
+  pool:
+    size: ${CONTAINER_POOL_SIZE:5}
+    max-uses: 100
+  mysql:
+    root-password: ${CONTAINER_MYSQL_ROOT_PASSWORD:container_root_pass}
+
+logging:
+  level:
+    com.sqljudge: DEBUG

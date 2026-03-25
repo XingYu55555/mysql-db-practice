@@ -1,0 +1,61 @@
+openapi: 3.0.3
+info:
+  title: Judge Service API
+  description: |
+    判题服务 - 核心判题逻辑、容器调度、结果比对
+
+    **重要说明**：本服务为内部服务，不暴露公网 API。所有接口仅供内部服务调用。
+
+    判题流程：
+    1. submission-service 向 RabbitMQ 投递判题任务
+    2. judge-service 从 RabbitMQ 消费判题任务
+    3. judge-service 调用 container-manager 获取容器
+    4. judge-service 在容器内执行 SQL 并比对结果
+    5. judge-service 通过 HTTP API 回写结果到 result-service
+  version: 1.0.0
+  internal: true
+
+servers:
+  - url: http://localhost:8084
+    description: 仅供内部服务调用
+
+tags:
+  - name: Internal
+    description: 内部接口（不暴露给前端）
+  - name: Health
+    description: 健康检查
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: 健康检查
+      operationId: healthCheck
+      responses:
+        '200':
+          description: 服务正常
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: UP
+                  timestamp:
+                    type: string
+                    format: date-time
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time

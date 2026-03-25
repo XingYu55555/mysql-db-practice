@@ -1,0 +1,348 @@
+openapi: 3.0.3
+info:
+  title: Container Manager Service API
+  description: |
+    容器管理服务 - 管理容器池、获取/释放容器、健康检查
+
+    **重要说明**：本服务为内部服务，不暴露公网 API。所有接口仅供内部服务（如 judge-service）调用。
+
+    容器连接认证方式：
+    - judge-service 调用时，container-manager 生成临时连接令牌
+    - 令牌有效期按题目难度动态设置：简单题10分钟，中等题30分钟，难题60分钟
+    - 过期自动失效，每次获取容器时生成新令牌
+  version: 1.0.0
+  internal: true
+
+servers:
+  - url: http://localhost:8085
+    description: 仅供内部服务调用
+
+tags:
+  - name: Internal
+    description: 内部接口（不暴露给前端）
+  - name: Health
+    description: 健康检查
+
+paths:
+  /api/container/acquire:
+    post:
+      tags:
+        - Internal
+      summary: 获取容器
+      description: 从容器池获取一个可用的Docker容器（内部接口）
+      operationId: acquireContainer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcquireContainerRequest'
+      responses:
+        '200':
+          description: 成功获取容器
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContainerInfo'
+        '503':
+          description: 无可用容器
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: 获取容器超时
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/container/release:
+    post:
+      tags:
+        - Internal
+      summary: 释放容器
+      description: 将容器重置后放回池中供下次使用（内部接口）
+      operationId: releaseContainer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseContainerRequest'
+      responses:
+        '200':
+          description: 释放成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  containerId:
+                    type: string
+                  status:
+                    type: string
+                    example: AVAILABLE
+        '404':
+          description: 容器不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/container/{containerId}:
+    get:
+      tags:
+        - Internal
+      summary: 获取容器信息
+      description: 根据容器ID获取容器详情（内部接口）
+      operationId: getContainerInfo
+      parameters:
+        - name: containerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContainerInfo'
+        '404':
+          description: 容器不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Internal
+      summary: 销毁容器
+      description: 销毁指定容器（通常在容器出现不可恢复错误时）（内部接口）
+      operationId: destroyContainer
+      parameters:
+        - name: containerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 销毁成功
+        '404':
+          description: 容器不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/container/{containerId}/health:
+    get:
+      tags:
+        - Internal
+      summary: 容器健康检查
+      description: 检查容器内MySQL是否可用（内部接口）
+      operationId: containerHealthCheck
+      parameters:
+        - name: containerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 容器健康
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  containerId:
+                    type: string
+                  mysqlStatus:
+                    type: string
+                    enum: [UP, DOWN]
+                  responseTimeMs:
+                    type: integer
+        '503':
+          description: 容器不健康
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  containerId:
+                    type: string
+                  mysqlStatus:
+                    type: string
+                    example: DOWN
+
+  /api/pool/status:
+    get:
+      tags:
+        - Internal
+      summary: 获取容器池状态
+      description: 查看容器池的总体状态（内部接口）
+      operationId: getPoolStatus
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoolStatusResponse'
+
+  /api/pool/stats:
+    get:
+      tags:
+        - Internal
+      summary: 获取容器池统计信息
+      description: 获取容器使用统计（内部接口）
+      operationId: getPoolStats
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoolStatsResponse'
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: 服务健康检查
+      operationId: healthCheck
+      responses:
+        '200':
+          description: 服务正常
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: UP
+                  timestamp:
+                    type: string
+                    format: date-time
+
+components:
+  schemas:
+    AcquireContainerRequest:
+      type: object
+      properties:
+        problemId:
+          type: integer
+          format: int64
+          description: 题目ID（用于预热特定数据库）
+        timeout:
+          type: integer
+          default: 10000
+          description: 获取超时时间(毫秒)
+
+    ReleaseContainerRequest:
+      type: object
+      required:
+        - containerId
+      properties:
+        containerId:
+          type: string
+          description: 容器ID
+        resetDatabase:
+          type: boolean
+          default: true
+          description: 是否重置数据库
+
+    ContainerInfo:
+      type: object
+      properties:
+        containerId:
+          type: string
+          description: Docker容器ID
+        containerName:
+          type: string
+          description: 容器名称
+        ipAddress:
+          type: string
+          description: 容器IP地址
+        mysqlPort:
+          type: integer
+          format: int32
+          default: 3306
+          description: MySQL端口
+        mysqlUser:
+          type: string
+          description: MySQL用户名
+        connectionToken:
+          type: string
+          description: 临时连接令牌（有效期按难度：简单10分钟/中等30分钟/难题60分钟）
+        tokenExpiresAt:
+          type: string
+          format: date-time
+          description: 令牌过期时间
+        status:
+          type: string
+          enum: [AVAILABLE, IN_USE, ERROR]
+        createdAt:
+          type: string
+          format: date-time
+
+    PoolStatusResponse:
+      type: object
+      properties:
+        totalContainers:
+          type: integer
+          description: 池中总容器数
+        availableContainers:
+          type: integer
+          description: 可用容器数
+        inUseContainers:
+          type: integer
+          description: 正在使用的容器数
+        errorContainers:
+          type: integer
+          description: 错误状态的容器数
+        poolCapacity:
+          type: integer
+          description: 池容量上限
+        status:
+          type: string
+          enum: [NORMAL, LOW, DEPLETED]
+
+    PoolStatsResponse:
+      type: object
+      properties:
+        totalAcquisitions:
+          type: integer
+          description: 历史总获取次数
+        totalReleases:
+          type: integer
+          description: 历史总释放次数
+        currentInUse:
+          type: integer
+          description: 当前使用数
+        averageAcquireTime:
+          type: integer
+          description: 平均获取耗时(毫秒)
+        peakInUse:
+          type: integer
+          description: 峰值使用数
+        uptime:
+          type: string
+          description: 服务运行时间
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time

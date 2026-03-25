@@ -1,0 +1,303 @@
+openapi: 3.0.3
+info:
+  title: Submission Service API
+  description: |
+    提交服务 - 接收学生提交、记录提交历史、调用判题
+
+    **内部服务调用**：
+    - 提交时调用 problem-service 验证题目存在且已发布
+    - 判题完成后调用 result-service 回写结果
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8083
+    description: 本地开发服务器
+
+tags:
+  - name: Submission
+    description: 提交管理
+
+paths:
+  /api/submission:
+    post:
+      tags:
+        - Submission
+      summary: 提交SQL答案
+      description: 学生提交SQL答案进行判题
+      operationId: createSubmission
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubmissionRequest'
+      responses:
+        '202':
+          description: 提交成功，已进入判题队列
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 题目不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 判题服务不可用（队列投递失败）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Submission
+      summary: 分页查询提交历史
+      description: 学生查询自己的提交历史
+      operationId: listSubmissions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: problemId
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: 按题目ID筛选
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, JUDGING, SUCCESS, FAILED]
+          description: 按状态筛选
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: submittedAt,desc
+            enum:
+              - submittedAt,desc
+              - submittedAt,asc
+              - score,desc
+          description: 排序字段
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionListResponse'
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/submission/{submissionId}:
+    get:
+      tags:
+        - Submission
+      summary: 获取提交详情
+      description: 学生查询某个提交的详细信息和判题状态
+      operationId: getSubmission
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: submissionId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionDetailResponse'
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 提交不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/submission/{submissionId}/status:
+    get:
+      tags:
+        - Submission
+      summary: 查询判题状态
+      description: 快速查询判题状态（用于轮询）
+      operationId: getSubmissionStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: submissionId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionStatusResponse'
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 提交不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    CreateSubmissionRequest:
+      type: object
+      required:
+        - problemId
+        - sqlContent
+      properties:
+        problemId:
+          type: integer
+          format: int64
+          description: 题目ID
+        sqlContent:
+          type: string
+          description: 学生提交的SQL内容
+
+    SubmissionResponse:
+      type: object
+      properties:
+        submissionId:
+          type: integer
+          format: int64
+          description: 提交ID
+        problemId:
+          type: integer
+          format: int64
+        problemTitle:
+          type: string
+          description: 题目标题
+        status:
+          type: string
+          enum: [PENDING, JUDGING, SUCCESS, FAILED]
+        submittedAt:
+          type: string
+          format: date-time
+
+    SubmissionDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/SubmissionResponse'
+        - type: object
+          properties:
+            sqlContent:
+              type: string
+              description: 提交的SQL内容
+            score:
+              type: number
+              format: decimal
+              description: 得分(0-100)
+            executionTimeMs:
+              type: integer
+              description: 执行时间(毫秒)
+            status:
+              type: string
+              enum: [CORRECT, INCORRECT, TIME_LIMIT, ERROR, AI_APPROVED, AI_REJECTED]
+              description: 判题状态
+            errorMessage:
+              type: string
+              description: 错误信息（仅学生可见的通用信息）
+
+    SubmissionListResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmissionResponse'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+
+    SubmissionStatusResponse:
+      type: object
+      properties:
+        submissionId:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [PENDING, JUDGING, SUCCESS, FAILED]
+          description: 提交状态
+        score:
+          type: number
+          format: decimal
+          description: 得分（判题完成后有值，0-100）
+        judgeStatus:
+          type: string
+          enum: [CORRECT, INCORRECT, TIME_LIMIT, ERROR, AI_APPROVED, AI_REJECTED]
+          description: 判题状态（判题完成后有值）
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time

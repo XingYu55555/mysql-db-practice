@@ -1,0 +1,50 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: judge-service
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/${DB_NAME:business_db}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root_password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+app:
+  container-manager:
+    url: ${CONTAINER_MANAGER_URL:http://localhost:8085}
+  result-service:
+    url: ${RESULT_SERVICE_URL:http://localhost:8086}
+    api-key: ${RESULT_SERVICE_API_KEY:internal-api-key}
+  problem-service:
+    url: ${PROBLEM_SERVICE_URL:http://localhost:8082}
+  judge:
+    exchange: judge-exchange
+    queue: judge-tasks
+    routing-key: judge.task
+  ai:
+    enabled: ${AI_ENABLED:true}
+    timeout: ${AI_TIMEOUT:30000}
+    retry: ${AI_RETRY:2}
+    confidence-threshold:
+      high: ${AI_CONFIDENCE_HIGH:0.9}
+      low: ${AI_CONFIDENCE_LOW:0.6}
+    api-key: ${AI_API_KEY:}
+    api-host: ${AI_API_HOST:}
+    model: ${AI_MODEL:qwen-turbo}
+
+logging:
+  level:
+    com.sqljudge: DEBUG

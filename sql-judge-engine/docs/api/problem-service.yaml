@@ -1,0 +1,640 @@
+openapi: 3.0.3
+info:
+  title: Problem Service API
+  description: 题目管理服务 - 题目 CRUD、初始化脚本存储、期望结果自动生成
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8082
+    description: 本地开发服务器
+
+tags:
+  - name: Problem
+    description: 题目管理
+  - name: Tag
+    description: 标签管理
+
+paths:
+  /api/problem:
+    post:
+      tags:
+        - Problem
+      summary: 创建题目
+      description: 教师创建新题目，包含初始化SQL和测试用例
+      operationId: createProblem
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProblemRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemResponse'
+        '401':
+          description: 未授权
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 仅教师可创建题目
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Problem
+      summary: 分页查询题目列表
+      description: 学生查看题目列表（不包含初始化SQL等敏感信息）
+      operationId: listProblems
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: difficulty
+          in: query
+          schema:
+            type: string
+            enum: [EASY, MEDIUM, HARD]
+        - name: sqlType
+          in: query
+          schema:
+            type: string
+            enum: [DQL, DML, DDL, DCL]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemListResponse'
+
+  /api/problem/{problemId}:
+    get:
+      tags:
+        - Problem
+      summary: 获取题目详情
+      description: |
+        获取题目详情，根据调用者角色返回不同内容：
+        - 教师：返回完整信息（含 initSql、standardAnswer、测试用例期望结果）
+        - 学生或内部服务：返回基本信息（不含 initSql、standardAnswer，仅含题目描述和测试用例基本信息）
+      operationId: getProblem
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 成功（根据角色返回不同内容）
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ProblemDetailResponse'
+                  - $ref: '#/components/schemas/ProblemBasicResponse'
+                discriminator:
+                  propertyName: responseType
+                  mapping:
+                    detail: '#/components/schemas/ProblemDetailResponse'
+                    basic: '#/components/schemas/ProblemBasicResponse'
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 题目不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Problem
+      summary: 更新题目
+      description: 教师更新题目信息
+      operationId: updateProblem
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProblemRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemResponse'
+        '403':
+          description: 仅题目创建者可更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Problem
+      summary: 删除题目
+      description: 教师删除题目（级联删除测试用例）
+      operationId: deleteProblem
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: 删除成功
+        '403':
+          description: 仅题目创建者可删除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 题目不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/problem/teacher/my:
+    get:
+      tags:
+        - Problem
+      summary: 获取当前教师创建的题目列表
+      description: 教师查看自己创建的所有题目
+      operationId: listMyProblems
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, READY, PUBLISHED, ARCHIVED]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemListResponse'
+
+  /api/problem/{problemId}/status:
+    put:
+      tags:
+        - Problem
+      summary: 更新题目状态
+      description: |
+        教师更新题目状态，状态流转：DRAFT -> READY -> PUBLISHED -> ARCHIVED
+        - DRAFT: 草稿状态，可编辑
+        - READY: 准备就绪，待发布
+        - PUBLISHED: 已发布，学生可见
+        - ARCHIVED: 已归档，不再使用
+      operationId: updateProblemStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProblemStatusRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemResponse'
+        '400':
+          description: 无效的状态流转
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 仅教师可操作
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/problem/batch:
+    post:
+      tags:
+        - Problem
+      summary: 批量导入题目
+      description: 教师通过 JSON 格式批量导入题目
+      operationId: batchImportProblems
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchImportRequest'
+      responses:
+        '201':
+          description: 导入成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchImportResponse'
+
+  /api/tag:
+    get:
+      tags:
+        - Tag
+      summary: 获取所有标签
+      description: 获取所有可用标签列表
+      operationId: listTags
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagListResponse'
+
+    post:
+      tags:
+        - Tag
+      summary: 创建标签
+      description: 教师创建新标签
+      operationId: createTag
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTagRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+
+  /api/problem/{problemId}/tags:
+    put:
+      tags:
+        - Tag
+      summary: 更新题目标签
+      description: 教师更新题目的标签
+      operationId: updateProblemTags
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProblemTagsRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagListResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    CreateProblemRequest:
+      type: object
+      required:
+        - title
+        - sqlType
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          description: 题目标题
+        description:
+          type: string
+          description: 题目描述
+        difficulty:
+          type: string
+          enum: [EASY, MEDIUM, HARD]
+          default: MEDIUM
+        sqlType:
+          type: string
+          enum: [DQL, DML, DDL, DCL]
+          description: SQL类型
+        aiAssisted:
+          type: boolean
+          default: false
+          description: 是否启用AI辅助判题（DDL/DCL类型有效）
+        initSql:
+          type: string
+          description: 初始化SQL脚本（建表、插入数据等）
+        standardAnswer:
+          type: string
+          description: 标准答案SQL（系统将自动生成期望结果）
+        expectedType:
+          type: string
+          enum: [RESULT_SET, DATA_SNAPSHOT, METADATA, PRIVILEGE]
+          description: 期望结果类型（系统根据sqlType自动设置，也可手动指定）
+
+    UpdateProblemRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        difficulty:
+          type: string
+          enum: [EASY, MEDIUM, HARD]
+        aiAssisted:
+          type: boolean
+          description: 是否启用AI辅助判题（DDL/DCL类型有效）
+        initSql:
+          type: string
+        standardAnswer:
+          type: string
+        expectedType:
+          type: string
+          enum: [RESULT_SET, DATA_SNAPSHOT, METADATA, PRIVILEGE]
+
+    UpdateProblemStatusRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [DRAFT, READY, PUBLISHED, ARCHIVED]
+
+    BatchImportRequest:
+      type: object
+      required:
+        - problems
+      properties:
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateProblemRequest'
+
+    BatchImportResponse:
+      type: object
+      properties:
+        successCount:
+          type: integer
+        failCount:
+          type: integer
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProblemResponse'
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchImportError'
+
+    BatchImportError:
+      type: object
+      properties:
+        index:
+          type: integer
+        title:
+          type: string
+        error:
+          type: string
+
+    TagResponse:
+      type: object
+      properties:
+        tagId:
+          type: integer
+          format: int64
+        name:
+          type: string
+        color:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    TagListResponse:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagResponse'
+
+    CreateTagRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          maxLength: 50
+        color:
+          type: string
+          default: "#3B82F6"
+
+    UpdateProblemTagsRequest:
+      type: object
+      required:
+        - tagIds
+      properties:
+        tagIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+
+    ProblemResponse:
+      type: object
+      properties:
+        problemId:
+          type: integer
+          format: int64
+        title:
+          type: string
+        description:
+          type: string
+        difficulty:
+          type: string
+        sqlType:
+          type: string
+        aiAssisted:
+          type: boolean
+          description: 是否启用AI辅助判题
+        status:
+          type: string
+          enum: [DRAFT, READY, PUBLISHED, ARCHIVED]
+        expectedType:
+          type: string
+          enum: [RESULT_SET, DATA_SNAPSHOT, METADATA, PRIVILEGE]
+        teacherId:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagResponse'
+
+    ProblemDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/ProblemResponse'
+        - type: object
+          properties:
+            responseType:
+              type: string
+              enum: [detail]
+              description: 用于 discriminator 区分响应类型
+            initSql:
+              type: string
+              description: 初始化SQL（教师可见）
+            standardAnswer:
+              type: string
+              description: 标准答案（教师可见）
+            expectedResult:
+              type: string
+              description: 期望结果JSON（教师可见）
+
+    ProblemListResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProblemResponse'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+
+    ProblemBasicResponse:
+      description: 学生/内部服务获取的题目基本信息（不含敏感字段）
+      type: object
+      properties:
+        responseType:
+          type: string
+          enum: [basic]
+          description: 用于 discriminator 区分响应类型
+        problemId:
+          type: integer
+          format: int64
+        title:
+          type: string
+          description: 题目标题
+        description:
+          type: string
+          description: 题目描述
+        difficulty:
+          type: string
+          enum: [EASY, MEDIUM, HARD]
+        sqlType:
+          type: string
+          enum: [DQL, DML, DDL, DCL]
+        expectedType:
+          type: string
+          enum: [RESULT_SET, DATA_SNAPSHOT, METADATA, PRIVILEGE]
+        teacherId:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time

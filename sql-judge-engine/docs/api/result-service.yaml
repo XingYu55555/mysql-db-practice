@@ -1,0 +1,557 @@
+openapi: 3.0.3
+info:
+  title: Result Service API
+  description: 结果服务 - 判题结果存储、成绩查询、排行榜
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8086
+    description: 本地开发服务器
+
+tags:
+  - name: Result
+    description: 判题结果
+  - name: Leaderboard
+    description: 排行榜
+  - name: Report
+    description: 报告导出
+  - name: Internal
+    description: 内部接口（供其他服务调用）
+
+paths:
+  /api/result:
+    post:
+      tags:
+        - Internal
+      summary: 创建判题结果
+      description: judge-service 回写判题结果（内部接口，使用 API Key 认证）
+      operationId: createResult
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateResultRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: API Key 无效或缺失
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/result/submission/{submissionId}:
+    get:
+      tags:
+        - Result
+      summary: 获取提交的判题结果
+      description: 根据提交ID获取判题结果详情
+      operationId: getResultBySubmission
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: submissionId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultDetailResponse'
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 结果不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/result/student/{studentId}:
+    get:
+      tags:
+        - Result
+      summary: 获取学生的所有成绩
+      description: |
+        学生查看自己的成绩，或教师查看某个学生的成绩。
+        - 学生只能查看自己的成绩
+        - 教师可以查看任意学生的成绩
+      operationId: getStudentResults
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentResultListResponse'
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无权查看他人成绩（学生查看他人成绩时）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/result/problem/{problemId}/leaderboard:
+    get:
+      tags:
+        - Leaderboard
+      summary: 获取题目排行榜
+      description: 获取某个题目的学生成绩排行榜
+      operationId: getProblemLeaderboard
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardResponse'
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/result/leaderboard:
+    get:
+      tags:
+        - Leaderboard
+      summary: 获取总排行榜
+      description: 获取所有题目的综合排行榜
+      operationId: getOverallLeaderboard
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OverallLeaderboardResponse'
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/result/problem/{problemId}/report:
+    get:
+      tags:
+        - Report
+      summary: 导出题目成绩报告
+      description: 教师导出某个题目的所有学生成绩（Excel格式）
+      operationId: exportProblemReport
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="problem_{problemId}_report.xlsx"
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 仅教师可导出报告
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/result/student/{studentId}/report:
+    get:
+      tags:
+        - Report
+      summary: 导出学生成绩报告
+      description: |
+        学生或教师导出某个学生的成绩报告。
+        - 学生只能导出自己的报告
+        - 教师可以导出任意学生的报告
+      operationId: exportStudentReport
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无权导出他人报告
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/result/statistics:
+    get:
+      tags:
+        - Result
+      summary: 获取判题统计信息
+      description: 仅教师可访问，获取全局或题目的判题统计
+      operationId: getStatistics
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: problemId
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: 按题目筛选（可选）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsResponse'
+        '401':
+          description: 未授权或Token过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 仅教师可访问统计信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: 内部服务间调用的 API Key
+
+  schemas:
+    CreateResultRequest:
+      type: object
+      required:
+        - submissionId
+        - score
+        - status
+      properties:
+        submissionId:
+          type: integer
+          format: int64
+        score:
+          type: number
+          format: decimal
+          description: 得分(0-100)
+        overallStatus:
+          type: string
+          enum: [CORRECT, INCORRECT, TIME_LIMIT, ERROR, AI_APPROVED, AI_REJECTED]
+        executionTimeMs:
+          type: integer
+          description: 总执行时间(毫秒)
+        errorMessage:
+          type: string
+          description: 错误信息
+        metadata:
+          type: object
+          description: 额外元数据
+          properties:
+            containerId:
+              type: string
+            dockerImage:
+              type: string
+
+    ResultResponse:
+      type: object
+      properties:
+        resultId:
+          type: integer
+          format: int64
+        submissionId:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+
+    ResultDetailResponse:
+      type: object
+      properties:
+        resultId:
+          type: integer
+          format: int64
+        submissionId:
+          type: integer
+          format: int64
+        problemId:
+          type: integer
+          format: int64
+        problemTitle:
+          type: string
+        studentId:
+          type: integer
+          format: int64
+        studentUsername:
+          type: string
+        score:
+          type: number
+          format: decimal
+          description: 得分(0-100)
+        status:
+          type: string
+          enum: [CORRECT, INCORRECT, TIME_LIMIT, ERROR, AI_APPROVED, AI_REJECTED]
+        executionTimeMs:
+          type: integer
+        errorMessage:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    StudentResultListResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultResponse'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        studentId:
+          type: integer
+          format: int64
+        studentUsername:
+          type: string
+        bestScore:
+          type: number
+          format: decimal
+        latestSubmitTime:
+          type: string
+          format: date-time
+
+    LeaderboardResponse:
+      type: object
+      properties:
+        problemId:
+          type: integer
+          format: int64
+        problemTitle:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaderboardEntry'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+
+    OverallLeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        studentId:
+          type: integer
+          format: int64
+        studentUsername:
+          type: string
+        totalScore:
+          type: number
+          format: decimal
+        problemsSolved:
+          type: integer
+        totalSubmissions:
+          type: integer
+
+    OverallLeaderboardResponse:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/OverallLeaderboardEntry'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+
+    StatisticsResponse:
+      type: object
+      properties:
+        problemId:
+          type: integer
+          format: int64
+          description: 题目ID（可选）
+        totalSubmissions:
+          type: integer
+          description: 总提交数
+        acceptedSubmissions:
+          type: integer
+          description: 正确数
+        acceptanceRate:
+          type: number
+          format: decimal
+          description: 通过率
+        averageScore:
+          type: number
+          format: decimal
+          description: 平均分
+        maxScore:
+          type: number
+          format: decimal
+          description: 最高分
+        minScore:
+          type: number
+          format: decimal
+          description: 最低分
+        averageExecutionTime:
+          type: integer
+          description: 平均执行时间(毫秒)
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
