@@ -1,5 +1,33 @@
-# Vue 3 + TypeScript + Vite
+# fronted
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Vue3 前端项目（Vite + TypeScript），通过网关访问后端 API。
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## 环境变量
+
+创建（已提供）`.env.development`：
+
+```env
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+> 后端网关需运行在 `8080`。测试使用 mock API，不依赖真实后端。
+
+## 安装与运行
+
+```bash
+pnpm install
+pnpm dev
+```
+
+## 测试
+
+```bash
+pnpm test
+pnpm e2e
+```
+
+## 构建
+
+```bash
+pnpm run build
+```
