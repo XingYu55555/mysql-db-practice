@@ -3,14 +3,14 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { setupRouterGuards } from '@/router/guards'
 import { useAuthStore } from '@/stores/auth'
+import { ElMessage } from 'element-plus'
 
-const warning = vi.fn()
-vi.mock('element-plus', () => ({ ElMessage: { warning } }))
+vi.mock('element-plus', () => ({ ElMessage: { warning: vi.fn() } }))
 
 describe('router guards', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    warning.mockReset()
+    vi.mocked(ElMessage.warning).mockReset()
     localStorage.clear()
   })
 
@@ -39,6 +39,6 @@ describe('router guards', () => {
     const router = makeRouter()
     await router.push('/submissions')
     expect(router.currentRoute.value.path).toBe('/problems')
-    expect(warning).toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalled()
   })
 })

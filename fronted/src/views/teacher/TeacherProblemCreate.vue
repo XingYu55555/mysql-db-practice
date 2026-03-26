@@ -18,9 +18,17 @@ import { reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createProblem } from '@/api/problem'
+import type { ProblemItem } from '@/api/types'
 
 const router = useRouter()
-const form = reactive({ title: '', description: '', difficulty: 'MEDIUM', sqlType: 'DQL', initSql: '', standardAnswer: '' })
+const form = reactive<{
+  title: string
+  description: string
+  difficulty: NonNullable<ProblemItem['difficulty']>
+  sqlType: NonNullable<ProblemItem['sqlType']>
+  initSql: string
+  standardAnswer: string
+}>({ title: '', description: '', difficulty: 'MEDIUM', sqlType: 'DQL', initSql: '', standardAnswer: '' })
 
 async function save() {
   if (!form.standardAnswer.trim()) {

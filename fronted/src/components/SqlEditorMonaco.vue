@@ -15,7 +15,7 @@ const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>()
 
 const containerRef = ref<HTMLElement>()
 const editorRef = ref<any>(null)
-const usePlainText = import.meta.env.MODE === 'test'
+const usePlainText = import.meta.env.MODE === 'test' || import.meta.env.VITE_USE_PLAIN_EDITOR === '1'
 
 onMounted(async () => {
   if (usePlainText || !containerRef.value) return

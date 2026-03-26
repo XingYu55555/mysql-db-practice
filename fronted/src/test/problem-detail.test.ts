@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import MockAdapter from 'axios-mock-adapter'
+import ElementPlus from 'element-plus'
 import ProblemDetail from '@/views/common/ProblemDetail.vue'
 import { apiClient } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -20,6 +21,8 @@ describe('ProblemDetail', () => {
   })
 
   it('submit -> polling success -> render summary; failed supports collapsed error', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
     const auth = useAuthStore()
     auth.setAuth({ token: 'x', userId: 1, role: 'STUDENT' })
 
@@ -33,7 +36,7 @@ describe('ProblemDetail', () => {
     await router.push('/problems/1')
     await router.isReady()
 
-    render(ProblemDetail, { global: { plugins: [createPinia(), router] } })
+    render(ProblemDetail, { global: { plugins: [pinia, router, ElementPlus] } })
 
     const input = await screen.findByPlaceholderText('请输入 SQL')
     await fireEvent.update(input, 'select 1')

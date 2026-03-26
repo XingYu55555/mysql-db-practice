@@ -18,6 +18,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createTag, getProblem, listTags, updateProblemTags } from '@/api/problem'
+import type { TagItem } from '@/api/types'
 
 const route = useRoute()
 const tags = ref<any[]>([])
@@ -27,7 +28,7 @@ const newTag = reactive({ name: '', color: '#3B82F6' })
 async function load() {
   tags.value = await listTags()
   const problem = await getProblem(Number(route.params.id))
-  selected.value = (problem.tags || []).map((t) => t.tagId)
+  selected.value = (problem.tags || []).map((t: TagItem) => t.tagId)
 }
 
 async function addTag() {
